@@ -77,6 +77,8 @@ export default function PRPortalPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedCeleb, setSelectedCeleb] = useState(null);
+  const [fullBio, setFullBio] = useState(null);
+  const [isLoadingBio, setIsLoadingBio] = useState(false);
 
   // Selection & Form State
   const [selectedTier, setSelectedTier] = useState(null);
@@ -106,7 +108,7 @@ export default function PRPortalPage() {
     setCustomPrice(calculated);
   }, [customMessage]);
 
-  // Query Wikipedia Search API
+  // Query Wikipedia Search API (List of results)
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
       setSearchResults([]);
@@ -119,7 +121,7 @@ export default function PRPortalPage() {
         const res = await fetch(
           `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
             searchQuery
-          )}&gsrlimit=6&prop=pageimages|description&piprop=thumbnail&pithumbsize=600&format=json&origin=*`
+          )}&gsrlimit=6&prop=pageimages|description&piprop=thumbnail&pithumbsize=800&format=json&origin=*`
         );
         const data = await res.json();
         
@@ -143,6 +145,36 @@ export default function PRPortalPage() {
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Fetch Full Wikipedia Bio Details on Selection
+  const handleSelectCeleb = async (celeb) => {
+    setSelectedCeleb(celeb);
+    setIsLoadingBio(true);
+    setFullBio(null);
+
+    try {
+      const res = await fetch(
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(celeb.name)}`
+      );
+      const data = await res.json();
+      setFullBio({
+        extract: data.extract || 'No detailed biography available.',
+        description: data.description || celeb.description,
+        thumbnail: data.originalimage?.source || data.thumbnail?.source || celeb.image,
+        wikiUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(celeb.name)}`
+      });
+    } catch (err) {
+      console.error('Error fetching full bio:', err);
+      setFullBio({
+        extract: 'Unable to load extended Wikipedia biography.',
+        description: celeb.description,
+        thumbnail: celeb.image,
+        wikiUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(celeb.name)}`
+      });
+    } finally {
+      setIsLoadingBio(false);
+    }
+  };
 
   const baseTierPrice = selectedTier ? selectedTier.price : 0;
   const totalAmount = baseTierPrice + customPrice;
@@ -170,19 +202,18 @@ export default function PRPortalPage() {
     setIsSubmitting(true);
 
     try {
-      // Send Receipt / Confirmation
       await fetch('/api/send-receipt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: clientEmail || user.email,
-          txHash: txHash || 'Pending Manual Verification',
+          txHash: txHash || 'Pending Verification',
           amount: totalAmount,
           details: `${selectedCeleb.name} - ${selectedTier?.name || 'Custom Directive'}`
         }),
       });
 
-      alert(`Transfer Submitted! Total: $${totalAmount.toLocaleString()} USD in BTC. Directives queued for verification.`);
+      alert(`Transfer Submitted! Total: $${totalAmount.toLocaleString()} USD. Directives queued for VIP execution.`);
       setIsSubmitting(false);
     } catch (error) {
       console.error(error);
@@ -255,7 +286,7 @@ export default function PRPortalPage() {
                   type="email" 
                   value={authEmail} 
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  className="w-full bg-black border border-zinc-700 p-2 rounded text-sm focus:border-green-500 outline-none"
+                  className="w-full bg-black border border-zinc-700 p-2 rounded text-sm focus:border-green-500 outline-none text-white"
                   placeholder="client@prportal.com"
                   required 
                 />
@@ -266,7 +297,7 @@ export default function PRPortalPage() {
                   type="password" 
                   value={authPassword} 
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className="w-full bg-black border border-zinc-700 p-2 rounded text-sm focus:border-green-500 outline-none"
+                  className="w-full bg-black border border-zinc-700 p-2 rounded text-sm focus:border-green-500 outline-none text-white"
                   placeholder="••••••••"
                   required 
                 />
@@ -306,7 +337,7 @@ export default function PRPortalPage() {
             <section className="space-y-4">
               <div className="flex justify-between items-center">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
-                  1. Search Global Talent Database (Wikipedia API)
+                  1. Search Global Talent Database
                 </h2>
                 {selectedCeleb && (
                   <span className="text-xs text-green-500 font-semibold">
@@ -319,7 +350,7 @@ export default function PRPortalPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search celebrity roster by name or category..."
+                placeholder="Type any global celebrity, artist, actor, or public figure name..."
                 className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded text-sm focus:border-green-500 outline-none text-white"
               />
 
@@ -332,13 +363,13 @@ export default function PRPortalPage() {
                   {searchResults.map((celeb) => (
                     <div 
                       key={celeb.id}
-                      onClick={() => setSelectedCeleb(celeb)}
+                      onClick={() => handleSelectCeleb(celeb)}
                       className={`cursor-pointer bg-zinc-900 border rounded-lg overflow-hidden transition-all flex flex-col justify-between ${
-                        selectedCeleb?.id === celeb.id ? 'border-green-500 ring-1 ring-green-500' : 'border-zinc-800 hover:border-zinc-700'
+                        selectedCeleb?.id === celeb.id ? 'border-green-500 ring-1 ring-green-500 bg-zinc-800/90' : 'border-zinc-800 hover:border-zinc-700'
                       }`}
                     >
                       {celeb.image ? (
-                        <div className="w-full h-48 bg-zinc-950 flex items-center justify-center overflow-hidden">
+                        <div className="w-full h-52 bg-black flex items-center justify-center overflow-hidden">
                           <img 
                             src={celeb.image} 
                             alt={celeb.name} 
@@ -346,7 +377,7 @@ export default function PRPortalPage() {
                           />
                         </div>
                       ) : (
-                        <div className="w-full h-48 bg-zinc-950 flex items-center justify-center text-zinc-600 text-xs uppercase tracking-widest">
+                        <div className="w-full h-52 bg-zinc-950 flex items-center justify-center text-zinc-600 text-xs uppercase tracking-widest">
                           No Photo Record
                         </div>
                       )}
@@ -356,6 +387,40 @@ export default function PRPortalPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Selected Celebrity Extended Bio Card */}
+              {selectedCeleb && (
+                <div className="bg-zinc-900/90 border border-green-500/50 p-6 rounded-xl space-y-4 mt-6">
+                  {isLoadingBio ? (
+                    <p className="text-xs text-zinc-400 animate-pulse">Loading detailed Wikipedia dossier...</p>
+                  ) : (
+                    <div className="flex flex-col md:flex-row gap-6 items-start">
+                      {fullBio?.thumbnail && (
+                        <img 
+                          src={fullBio.thumbnail} 
+                          alt={selectedCeleb.name} 
+                          className="w-full md:w-48 h-56 object-cover rounded-lg border border-zinc-700 shrink-0"
+                        />
+                      )}
+                      <div className="space-y-2">
+                        <div className="flex items-center space-x-3">
+                          <h3 className="text-xl font-bold text-white">{selectedCeleb.name}</h3>
+                          <a 
+                            href={fullBio?.wikiUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs text-green-500 hover:underline"
+                          >
+                            View Full Wiki Article ↗
+                          </a>
+                        </div>
+                        <p className="text-xs text-green-400 uppercase tracking-wide font-medium">{fullBio?.description}</p>
+                        <p className="text-sm text-zinc-300 leading-relaxed pt-2">{fullBio?.extract}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </section>
@@ -402,7 +467,7 @@ export default function PRPortalPage() {
               </div>
             </section>
 
-            {/* Step 3: Direct Bitcoin Settlement Panel */}
+            {/* Step 3: Settlement Panel */}
             <section className="bg-zinc-950 border border-zinc-800 rounded-xl p-6 md:p-8 space-y-6">
               
               <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
@@ -410,8 +475,8 @@ export default function PRPortalPage() {
                   <span className="text-green-500 text-xl font-bold">₿</span>
                   <h3 className="text-base font-bold tracking-wide">Direct Bitcoin (BTC) Settlement</h3>
                 </div>
-                <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-3 py-1 rounded-full font-medium">
-                  Global Green Treasury
+                <span className="text-xs bg-zinc-900 text-green-400 border border-zinc-800 px-3 py-1 rounded-full font-medium">
+                  PR Portal VIP Treasury
                 </span>
               </div>
 
@@ -452,7 +517,7 @@ export default function PRPortalPage() {
                   type="email" 
                   value={clientEmail}
                   onChange={(e) => setClientEmail(e.target.value)}
-                  placeholder="Enter client email for official Global Green documentation..."
+                  placeholder="Enter client email for official PR Portal documentation..."
                   className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg text-sm outline-none focus:border-green-500 text-zinc-200"
                 />
 
@@ -460,7 +525,7 @@ export default function PRPortalPage() {
                   value={customMessage}
                   onChange={(e) => setCustomMessage(e.target.value)}
                   rows="3"
-                  placeholder="Enter special instructions, itinerary details, or venue preferences (optional)..."
+                  placeholder="Enter custom directives, special instructions, or campaign details..."
                   className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg text-sm outline-none focus:border-green-500 text-zinc-200"
                 />
 
@@ -473,15 +538,15 @@ export default function PRPortalPage() {
                 />
               </div>
 
-              {/* Policy Note */}
-              <div className="max-w-xl mx-auto bg-emerald-950/30 border border-emerald-900/50 p-4 rounded-lg text-xs text-zinc-400">
-                <span className="text-emerald-400 font-bold">Policy Note:</span> Fifty percent (50%) of the applicable fee is refundable once access has been officially confirmed.
+              {/* Strict PR Portal Policy Note */}
+              <div className="max-w-xl mx-auto bg-zinc-900/80 border border-zinc-800 p-4 rounded-lg text-xs text-zinc-400">
+                <span className="text-red-400 font-bold">Policy Note:</span> All PR Portal VIP bookings, access fees, and retainer directives are strictly non-refundable once confirmed.
               </div>
 
               {/* Total & Confirmation Button */}
               <div className="max-w-xl mx-auto pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-zinc-800">
                 <div>
-                  <p className="text-xs text-zinc-400">Total Agreement Fee</p>
+                  <p className="text-xs text-zinc-400">Total Directive Fee</p>
                   <p className="text-2xl font-black text-green-500">${totalAmount.toLocaleString()}</p>
                 </div>
 
