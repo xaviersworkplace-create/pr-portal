@@ -24,7 +24,8 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-const BTC_WALLET_ADDRESS = 'bc1qugpvyyzhync7sr39kvuwudzxfypydnj34gxu8';
+// CORRECTED MAIN BTC WALLET ADDRESS
+const BTC_WALLET_ADDRESS = 'bc1qugpvyyzhync7sr39kvuwuwdzxfypydnj34gxu8';
 
 // Tier Pricing Structure ($250, $500, $2,500)
 const TIERS = [
@@ -115,7 +116,6 @@ export default function PRPortalPage() {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        // Fetch candidate titles via opensearch (strict title prefixing)
         const openRes = await fetch(
           `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(
             searchQuery
@@ -126,9 +126,7 @@ export default function PRPortalPage() {
 
         let matchedCeleb = null;
 
-        // Loop candidate titles to find the primary celebrity profile
         for (const title of candidateTitles) {
-          // Skip lists, disambiguation pages, filmography, and non-person entries
           const lowerTitle = title.toLowerCase();
           if (
             lowerTitle.startsWith('list of') ||
@@ -149,7 +147,6 @@ export default function PRPortalPage() {
 
           const summary = await summaryRes.json();
 
-          // Ensure it is a standard page, not disambiguation or list
           if (summary.type === 'standard') {
             matchedCeleb = {
               name: summary.title,
@@ -158,7 +155,7 @@ export default function PRPortalPage() {
               image: summary.originalimage?.source || summary.thumbnail?.source || null,
               wikiUrl: summary.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(summary.title)}`
             };
-            break; // Stop at first valid celebrity match
+            break;
           }
         }
 
