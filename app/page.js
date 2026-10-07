@@ -24,22 +24,14 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-// Celebrity Database Directory
-const CELEBRITIES = [
-  { id: '1', name: 'Burna Boy', category: 'Music / Afrobeats', image: '🎤' },
-  { id: '2', name: 'Wizkid', category: 'Music / Afrobeats', image: '🦅' },
-  { id: '3', name: 'Davido', category: 'Music / Afrobeats', image: '⏳' },
-  { id: '4', name: 'Tems', category: 'Music / R&B', image: '✨' },
-  { id: '5', name: 'Asake', category: 'Music / Afro-Fusion', image: '🚀' },
-  { id: '6', name: 'Rema', category: 'Music / Rave', image: '🦇' },
-];
+const BTC_WALLET_ADDRESS = 'bc1qugpvyyzhync7sr39kvuwudzxfypydnj34gxu8';
 
-// Tier Pricing Structure ($75, $200, $1,500)
+// Tier Pricing Structure ($250, $500, $2500)
 const TIERS = [
   {
     id: 'tier-1',
     name: 'Tier I: Digital Pass',
-    price: 75,
+    price: 250,
     tagline: 'Entry-Level Personal Touch',
     features: [
       'Custom 60s Video Shoutout',
@@ -50,7 +42,7 @@ const TIERS = [
   {
     id: 'tier-2',
     name: "Tier II: Collector's Vault",
-    price: 200,
+    price: 500,
     tagline: 'Physical Keepsakes & Priority Access',
     features: [
       'Authenticated Physical Autograph',
@@ -61,7 +53,7 @@ const TIERS = [
   {
     id: 'tier-3',
     name: 'Tier III: VIP Backstage Pass',
-    price: 1500,
+    price: 2500,
     tagline: 'The Ultimate Super-Fan Experience',
     features: [
       '1-on-1 Virtual Meet & Greet',
@@ -80,23 +72,31 @@ export default function PRPortalPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [authError, setAuthError] = useState('');
 
-  // Portal State
+  // Wikipedia Search State
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [selectedCeleb, setSelectedCeleb] = useState(null);
+
+  // Selection & Form State
   const [selectedTier, setSelectedTier] = useState(null);
   const [customMessage, setCustomMessage] = useState('');
   const [customPrice, setCustomPrice] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [clientEmail, setClientEmail] = useState('');
+  const [txHash, setTxHash] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auth Listener
+  // Auth Observer
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((currentUser) => {
       setUser(currentUser);
+      if (currentUser?.email) setClientEmail(currentUser.email);
     });
     return () => unsubscribe();
   }, []);
 
-  // Custom Directives Calculation ($250 min when custom text provided)
+  // Custom Directives Calculation
   useEffect(() => {
     if (!customMessage.trim()) {
       setCustomPrice(0);
@@ -106,16 +106,92 @@ export default function PRPortalPage() {
     setCustomPrice(calculated);
   }, [customMessage]);
 
+  // Query Wikipedia Search API
+  useEffect(() => {
+    if (!searchQuery.trim() || searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(
+          `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
+            searchQuery
+          )}&gsrlimit=6&prop=pageimages|description&piprop=thumbnail&pithumbsize=600&format=json&origin=*`
+        );
+        const data = await res.json();
+        
+        if (data.query && data.query.pages) {
+          const pages = Object.values(data.query.pages).map((p) => ({
+            id: p.pageid,
+            name: p.title,
+            description: p.description || 'Public Figure / Global Icon',
+            image: p.thumbnail?.source || null,
+          }));
+          setSearchResults(pages);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (err) {
+        console.error('Wiki search error:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const baseTierPrice = selectedTier ? selectedTier.price : 0;
   const totalAmount = baseTierPrice + customPrice;
 
-  // Filter Celebrities
-  const filteredCelebrities = CELEBRITIES.filter((celeb) =>
-    celeb.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    celeb.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleCopyWallet = () => {
+    navigator.clipboard.writeText(BTC_WALLET_ADDRESS);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
-  // Handlers
+  const handleConfirmBtcTransfer = async () => {
+    if (!user) {
+      alert('Please sign in to execute request.');
+      return;
+    }
+    if (!selectedCeleb) {
+      alert('Please search and select a target celebrity.');
+      return;
+    }
+    if (totalAmount <= 0) {
+      alert('Please select a tier package or enter custom directives.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // Send Receipt / Confirmation
+      await fetch('/api/send-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: clientEmail || user.email,
+          txHash: txHash || 'Pending Manual Verification',
+          amount: totalAmount,
+          details: `${selectedCeleb.name} - ${selectedTier?.name || 'Custom Directive'}`
+        }),
+      });
+
+      alert(`Transfer Submitted! Total: $${totalAmount.toLocaleString()} USD in BTC. Directives queued for verification.`);
+      setIsSubmitting(false);
+    } catch (error) {
+      console.error(error);
+      alert('Submission received.');
+      setIsSubmitting(false);
+    }
+  };
+
+  // Auth Handlers
   const handleEmailAuth = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -139,57 +215,7 @@ export default function PRPortalPage() {
     }
   };
 
-  const handlePayment = async () => {
-    if (!user) {
-      alert('Please sign in to execute request.');
-      return;
-    }
-    if (!selectedCeleb) {
-      alert('Please select a celebrity from the directory.');
-      return;
-    }
-    if (totalAmount <= 0) {
-      alert('Please select a tier or enter custom directives.');
-      return;
-    }
-
-    setIsProcessing(true);
-
-    try {
-      const handler = window.PaystackPop && window.PaystackPop.setup({
-        key: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY,
-        email: user.email,
-        amount: totalAmount * 100, // Paystack expects cents
-        currency: 'USD',
-        ref: 'PR_' + Math.floor(Math.random() * 1000000000 + 1),
-        callback: async (response) => {
-          await fetch('/api/send-receipt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: user.email,
-              reference: response.reference,
-              amount: totalAmount,
-              details: `${selectedCeleb.name} - ${selectedTier?.name || 'Custom Request'}`
-            }),
-          });
-          alert('Execution Confirmed! Reference: ' + response.reference);
-          setIsProcessing(false);
-        },
-        onClose: () => setIsProcessing(false)
-      });
-
-      if (handler) {
-        handler.openIframe();
-      } else {
-        alert('Payment gateway failed to load.');
-        setIsProcessing(false);
-      }
-    } catch (error) {
-      console.error(error);
-      setIsProcessing(false);
-    }
-  };
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${BTC_WALLET_ADDRESS}`;
 
   return (
     <div className="min-h-screen bg-black text-white p-6 md:p-12 font-sans">
@@ -211,8 +237,8 @@ export default function PRPortalPage() {
           )}
         </header>
 
-        {/* Authentication Form if logged out */}
         {!user ? (
+          /* Auth Form */
           <div className="max-w-md mx-auto bg-zinc-900 border border-zinc-800 p-6 rounded-lg space-y-4">
             <h2 className="text-lg font-semibold text-center">
               {isSignUp ? 'Create Account' : 'Access PR Portal'}
@@ -273,14 +299,14 @@ export default function PRPortalPage() {
             </p>
           </div>
         ) : (
-          /* Main VIP Portal Interface */
+          /* VIP Portal Interface */
           <div className="space-y-10">
 
-            {/* Step 1: Celebrity Search */}
+            {/* Step 1: Wikipedia Search */}
             <section className="space-y-4">
               <div className="flex justify-between items-center">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
-                  1. Select Talent Target
+                  1. Search Global Talent Database (Wikipedia API)
                 </h2>
                 {selectedCeleb && (
                   <span className="text-xs text-green-500 font-semibold">
@@ -294,29 +320,47 @@ export default function PRPortalPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search celebrity roster by name or category..."
-                className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded text-sm focus:border-green-500 outline-none"
+                className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded text-sm focus:border-green-500 outline-none text-white"
               />
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {filteredCelebrities.map((celeb) => (
-                  <div 
-                    key={celeb.id}
-                    onClick={() => setSelectedCeleb(celeb)}
-                    className={`cursor-pointer bg-zinc-900 border p-4 rounded-lg flex items-center space-x-3 transition-colors ${
-                      selectedCeleb?.id === celeb.id ? 'border-green-500 bg-zinc-800/80' : 'border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <span className="text-2xl">{celeb.image}</span>
-                    <div>
-                      <h3 className="text-sm font-bold">{celeb.name}</h3>
-                      <p className="text-xs text-zinc-500">{celeb.category}</p>
+              {isSearching && (
+                <p className="text-xs text-zinc-500 animate-pulse">Querying Wikipedia database...</p>
+              )}
+
+              {searchResults.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                  {searchResults.map((celeb) => (
+                    <div 
+                      key={celeb.id}
+                      onClick={() => setSelectedCeleb(celeb)}
+                      className={`cursor-pointer bg-zinc-900 border rounded-lg overflow-hidden transition-all flex flex-col justify-between ${
+                        selectedCeleb?.id === celeb.id ? 'border-green-500 ring-1 ring-green-500' : 'border-zinc-800 hover:border-zinc-700'
+                      }`}
+                    >
+                      {celeb.image ? (
+                        <div className="w-full h-48 bg-zinc-950 flex items-center justify-center overflow-hidden">
+                          <img 
+                            src={celeb.image} 
+                            alt={celeb.name} 
+                            className="w-full h-full object-contain p-2"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full h-48 bg-zinc-950 flex items-center justify-center text-zinc-600 text-xs uppercase tracking-widest">
+                          No Photo Record
+                        </div>
+                      )}
+                      <div className="p-4 space-y-1 bg-zinc-900">
+                        <h3 className="text-sm font-bold text-white line-clamp-1">{celeb.name}</h3>
+                        <p className="text-xs text-zinc-400 capitalize line-clamp-2">{celeb.description}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </section>
 
-            {/* Step 2: Tiers Selection ($75, $200, $1500) */}
+            {/* Step 2: Tier Selection ($250, $500, $2500) */}
             <section className="space-y-4">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
                 2. Choose Engagement Tier
@@ -358,53 +402,96 @@ export default function PRPortalPage() {
               </div>
             </section>
 
-            {/* Step 3: Custom Directives & Checkout */}
-            <section className="grid md:grid-cols-3 gap-8 pt-4 border-t border-zinc-800">
+            {/* Step 3: Direct Bitcoin Settlement Panel */}
+            <section className="bg-zinc-950 border border-zinc-800 rounded-xl p-6 md:p-8 space-y-6">
               
-              <div className="md:col-span-2 space-y-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
-                  3. Custom Directives / Requirements (Optional)
-                </h2>
+              <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
+                <div className="flex items-center space-x-2">
+                  <span className="text-green-500 text-xl font-bold">₿</span>
+                  <h3 className="text-base font-bold tracking-wide">Direct Bitcoin (BTC) Settlement</h3>
+                </div>
+                <span className="text-xs bg-emerald-950 text-emerald-400 border border-emerald-800 px-3 py-1 rounded-full font-medium">
+                  Global Green Treasury
+                </span>
+              </div>
+
+              <div className="text-center space-y-4">
+                <p className="text-xs md:text-sm text-zinc-300">
+                  Scan QR Code or copy agency wallet to transfer <span className="font-bold text-white">${totalAmount.toLocaleString()} USD</span> in Bitcoin:
+                </p>
+
+                {/* QR Code */}
+                <div className="bg-white p-3 rounded-lg inline-block mx-auto">
+                  <img 
+                    src={qrUrl} 
+                    alt="Bitcoin Wallet QR Code" 
+                    className="w-48 h-48 md:w-56 md:h-56 object-contain"
+                  />
+                </div>
+
+                {/* Wallet Input + Copy Button */}
+                <div className="max-w-xl mx-auto flex items-center bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden p-1">
+                  <input 
+                    type="text" 
+                    readOnly 
+                    value={BTC_WALLET_ADDRESS} 
+                    className="bg-transparent text-green-400 font-mono text-xs md:text-sm px-3 py-2 w-full outline-none"
+                  />
+                  <button 
+                    onClick={handleCopyWallet}
+                    className="bg-green-500 hover:bg-green-400 text-black font-semibold text-xs px-4 py-2.5 rounded flex items-center space-x-1 shrink-0 transition-colors"
+                  >
+                    <span>{copied ? 'Copied!' : 'Copy Address'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Input Fields */}
+              <div className="max-w-xl mx-auto space-y-3">
+                <input 
+                  type="email" 
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  placeholder="Enter client email for official Global Green documentation..."
+                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg text-sm outline-none focus:border-green-500 text-zinc-200"
+                />
+
                 <textarea 
                   value={customMessage}
                   onChange={(e) => setCustomMessage(e.target.value)}
-                  rows="4"
-                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded text-sm focus:border-green-500 outline-none text-zinc-200"
-                  placeholder="Specify occasions, custom names, or special campaign requests ($250 base directive fee applies if added)..."
+                  rows="3"
+                  placeholder="Enter special instructions, itinerary details, or venue preferences (optional)..."
+                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg text-sm outline-none focus:border-green-500 text-zinc-200"
+                />
+
+                <input 
+                  type="text" 
+                  value={txHash}
+                  onChange={(e) => setTxHash(e.target.value)}
+                  placeholder="Enter Bitcoin Transaction Hash / TXID (optional)..."
+                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg text-sm outline-none focus:border-green-500 text-zinc-200 font-mono"
                 />
               </div>
 
-              {/* Execution Summary Box */}
-              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg space-y-6 h-fit">
-                <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-300 border-b border-zinc-800 pb-3">
-                  Execution Summary
-                </h3>
+              {/* Policy Note */}
+              <div className="max-w-xl mx-auto bg-emerald-950/30 border border-emerald-900/50 p-4 rounded-lg text-xs text-zinc-400">
+                <span className="text-emerald-400 font-bold">Policy Note:</span> Fifty percent (50%) of the applicable fee is refundable once access has been officially confirmed.
+              </div>
 
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between text-zinc-400">
-                    <span>Target:</span>
-                    <span className="text-white font-medium">{selectedCeleb ? selectedCeleb.name : 'None'}</span>
-                  </div>
-                  <div className="flex justify-between text-zinc-400">
-                    <span>Tier Package:</span>
-                    <span className="text-white font-medium">${baseTierPrice}</span>
-                  </div>
-                  <div className="flex justify-between text-zinc-400">
-                    <span>Custom Directives:</span>
-                    <span className="text-white font-medium">${customPrice}</span>
-                  </div>
-                  <div className="border-t border-zinc-800 pt-3 flex justify-between font-semibold text-base">
-                    <span>Total Investment:</span>
-                    <span className="text-green-500">${totalAmount}</span>
-                  </div>
+              {/* Total & Confirmation Button */}
+              <div className="max-w-xl mx-auto pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-zinc-800">
+                <div>
+                  <p className="text-xs text-zinc-400">Total Agreement Fee</p>
+                  <p className="text-2xl font-black text-green-500">${totalAmount.toLocaleString()}</p>
                 </div>
 
                 <button 
-                  onClick={handlePayment}
-                  disabled={isProcessing}
-                  className="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-3 rounded tracking-wider text-sm disabled:opacity-50 transition-colors"
+                  onClick={handleConfirmBtcTransfer}
+                  disabled={isSubmitting}
+                  className="bg-green-500 hover:bg-green-400 text-black font-bold px-6 py-3 rounded-lg text-sm flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
                 >
-                  {isProcessing ? 'PROCESSING...' : `EXECUTE DIRECTIVE ($${totalAmount})`}
+                  <span>✓</span>
+                  <span>{isSubmitting ? 'Submitting...' : 'Confirm Bitcoin Transfer'}</span>
                 </button>
               </div>
 
