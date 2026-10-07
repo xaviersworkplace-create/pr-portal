@@ -105,7 +105,7 @@ export default function PRPortalPage() {
     setCustomPrice(calculated);
   }, [customMessage]);
 
-  // Query Wikipedia Search API for ONLY the top primary match
+  // Query Wikipedia Title Prefix Search API (Strict title matching only)
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
       setSelectedCeleb(null);
@@ -115,20 +115,18 @@ export default function PRPortalPage() {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        // Fetch top search result title
         const searchRes = await fetch(
-          `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
+          `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(
             searchQuery
-          )}&srlimit=1&format=json&origin=*`
+          )}&limit=1&namespace=0&format=json&origin=*`
         );
         const searchData = await searchRes.json();
 
-        if (searchData.query?.search?.length > 0) {
-          const topTitle = searchData.query.search[0].title;
+        if (searchData && searchData[1] && searchData[1].length > 0) {
+          const exactTitle = searchData[1][0];
           
-          // Fetch exact page summary for top result
           const summaryRes = await fetch(
-            `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topTitle)}`
+            `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(exactTitle)}`
           );
           const summary = await summaryRes.json();
 
@@ -309,7 +307,7 @@ export default function PRPortalPage() {
           /* VIP Portal Interface */
           <div className="space-y-10">
 
-            {/* Step 1: Wikipedia Search (Shows ONLY Top Single Celeb Match) */}
+            {/* Step 1: Wikipedia Direct Name Match */}
             <section className="space-y-4">
               <div className="flex justify-between items-center">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
@@ -326,15 +324,15 @@ export default function PRPortalPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Type celebrity name..."
+                placeholder="Type celebrity name (e.g. Tom Holland, Drake)..."
                 className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg text-sm focus:border-green-500 outline-none text-white"
               />
 
               {isSearching && (
-                <p className="text-xs text-zinc-500 animate-pulse">Searching Wikipedia database...</p>
+                <p className="text-xs text-zinc-500 animate-pulse">Querying Wikipedia database...</p>
               )}
 
-              {/* Single Top Celeb Profile Card */}
+              {/* Single Top Match Celeb Dossier */}
               {selectedCeleb && !isSearching && (
                 <div className="bg-zinc-900 border border-green-500/80 rounded-xl overflow-hidden p-6 space-y-4 shadow-lg">
                   {selectedCeleb.image && (
@@ -485,34 +483,10 @@ export default function PRPortalPage() {
                 />
               </div>
 
-              {/* Strict Non-Refundable Policy Note */}
+              {/* Strict Policy Note */}
               <div className="max-w-xl mx-auto bg-zinc-900/80 border border-zinc-800 p-4 rounded-lg text-xs text-zinc-400">
                 <span className="text-red-400 font-bold">Policy Note:</span> All PR Portal VIP bookings, access fees, and retainer directives are strictly non-refundable once confirmed.
               </div>
 
               {/* Total & Confirmation Button */}
-              <div className="max-w-xl mx-auto pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-zinc-800">
-                <div>
-                  <p className="text-xs text-zinc-400">Total Directive Fee</p>
-                  <p className="text-2xl font-black text-green-500">${totalAmount.toLocaleString()}</p>
-                </div>
-
-                <button 
-                  onClick={handleConfirmBtcTransfer}
-                  disabled={isSubmitting}
-                  className="bg-green-500 hover:bg-green-400 text-black font-bold px-6 py-3 rounded-lg text-sm flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
-                >
-                  <span>✓</span>
-                  <span>{isSubmitting ? 'Submitting...' : 'Confirm Bitcoin Transfer'}</span>
-                </button>
-              </div>
-
-            </section>
-
-          </div>
-        )}
-
-      </div>
-    </div>
-  );
-}
+              <div className="max-w-xl mx-auto pt-
