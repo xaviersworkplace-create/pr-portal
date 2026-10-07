@@ -392,3 +392,148 @@ export default function PRPortalPage() {
                 </div>
               )}
             </section>
+
+            {/* Step 2: Tier Selection ($250, $500, $2500) */}
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+                2. Choose Engagement Tier
+              </h2>
+
+              <div className="grid md:grid-cols-3 gap-6">
+                {TIERS.map((tier) => (
+                  <div 
+                    key={tier.id}
+                    onClick={() => setSelectedTier(selectedTier?.id === tier.id ? null : tier)}
+                    className={`cursor-pointer bg-zinc-900 border p-6 rounded-lg space-y-4 flex flex-col justify-between transition-colors ${
+                      selectedTier?.id === tier.id ? 'border-green-500 bg-zinc-800/80' : 'border-zinc-800 hover:border-zinc-700'
+                    }`}
+                  >
+                    <div>
+                      <h3 className="text-base font-bold text-white">{tier.name}</h3>
+                      <p className="text-xs text-zinc-400 mt-1">{tier.tagline}</p>
+                      <div className="text-2xl font-extrabold text-green-500 mt-3">${tier.price}</div>
+                      
+                      <ul className="mt-4 space-y-2 text-xs text-zinc-300">
+                        {tier.features.map((feat, idx) => (
+                          <li key={idx} className="flex items-start">
+                            <span className="text-green-500 mr-2">•</span>
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <button className={`w-full py-2 rounded text-xs font-bold uppercase tracking-wider transition-colors ${
+                      selectedTier?.id === tier.id 
+                        ? 'bg-green-500 text-black' 
+                        : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    }`}>
+                      {selectedTier?.id === tier.id ? 'Selected' : 'Select Tier'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Step 3: Settlement Panel */}
+            <section className="bg-zinc-950 border border-zinc-800 rounded-xl p-6 md:p-8 space-y-6">
+              
+              <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
+                <div className="flex items-center space-x-2">
+                  <span className="text-green-500 text-xl font-bold">₿</span>
+                  <h3 className="text-base font-bold tracking-wide">Direct Bitcoin (BTC) Settlement</h3>
+                </div>
+                <span className="text-xs bg-zinc-900 text-green-400 border border-zinc-800 px-3 py-1 rounded-full font-medium">
+                  PR Portal VIP Treasury
+                </span>
+              </div>
+
+              <div className="text-center space-y-4">
+                <p className="text-xs md:text-sm text-zinc-300">
+                  Scan QR Code or copy agency wallet to transfer <span className="font-bold text-white">${totalAmount.toLocaleString()} USD</span> in Bitcoin:
+                </p>
+
+                {/* QR Code */}
+                <div className="bg-white p-3 rounded-lg inline-block mx-auto">
+                  <img 
+                    src={qrUrl} 
+                    alt="Bitcoin Wallet QR Code" 
+                    className="w-48 h-48 md:w-56 md:h-56 object-contain"
+                  />
+                </div>
+
+                {/* Wallet Input + Copy Button */}
+                <div className="max-w-xl mx-auto flex items-center bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden p-1">
+                  <input 
+                    type="text" 
+                    readOnly 
+                    value={BTC_WALLET_ADDRESS} 
+                    className="bg-transparent text-green-400 font-mono text-xs md:text-sm px-3 py-2 w-full outline-none"
+                  />
+                  <button 
+                    onClick={handleCopyWallet}
+                    className="bg-green-500 hover:bg-green-400 text-black font-semibold text-xs px-4 py-2.5 rounded flex items-center space-x-1 shrink-0 transition-colors"
+                  >
+                    <span>{copied ? 'Copied!' : 'Copy Address'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Input Fields */}
+              <div className="max-w-xl mx-auto space-y-3">
+                <input 
+                  type="email" 
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  placeholder="Enter client email for official PR Portal documentation..."
+                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg text-sm outline-none focus:border-green-500 text-zinc-200"
+                />
+
+                <textarea 
+                  value={customMessage}
+                  onChange={(e) => setCustomMessage(e.target.value)}
+                  rows="3"
+                  placeholder="Enter custom directives, special instructions, or campaign details..."
+                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg text-sm outline-none focus:border-green-500 text-zinc-200"
+                />
+
+                <input 
+                  type="text" 
+                  value={txHash}
+                  onChange={(e) => setTxHash(e.target.value)}
+                  placeholder="Enter Bitcoin Transaction Hash / TXID (optional)..."
+                  className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-lg text-sm outline-none focus:border-green-500 text-zinc-200 font-mono"
+                />
+              </div>
+
+              {/* Strict Non-Refundable Policy Note */}
+              <div className="max-w-xl mx-auto bg-zinc-900/80 border border-zinc-800 p-4 rounded-lg text-xs text-zinc-400">
+                <span className="text-red-400 font-bold">Policy Note:</span> All PR Portal VIP bookings, access fees, and retainer directives are strictly non-refundable once confirmed.
+              </div>
+
+              {/* Total & Confirmation Button */}
+              <div className="max-w-xl mx-auto pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-zinc-800">
+                <div>
+                  <p className="text-xs text-zinc-400">Total Directive Fee</p>
+                  <p className="text-2xl font-black text-green-500">${totalAmount.toLocaleString()}</p>
+                </div>
+
+                <button 
+                  onClick={handleConfirmBtcTransfer}
+                  disabled={isSubmitting}
+                  className="bg-green-500 hover:bg-green-400 text-black font-bold px-6 py-3 rounded-lg text-sm flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
+                >
+                  <span>✓</span>
+                  <span>{isSubmitting ? 'Submitting...' : 'Confirm Bitcoin Transfer'}</span>
+                </button>
+              </div>
+
+            </section>
+
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
